@@ -693,33 +693,35 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
         }
 
         // VBO
-        GLfloat *vertex_buffer = new GLfloat[io_rendering_data.geometry.vertices.size() * vertex_data_size];
+        GLfloat *p_vertex_buffer = new GLfloat[io_rendering_data.geometry.vertices.size() * vertex_data_size];
         unsigned int offset = 0;
         for (unsigned int i = 0; i < io_rendering_data.geometry.vertices.size(); ++i)
         {
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.x);
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.y);
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.z);
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.x);
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.y);
-            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.z);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.x);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.y);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.z);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.x);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.y);
+            p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.z);
             if (in_rendering_config.rendering_options.test(COLOR))
             {
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.x);
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.y);
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.z);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.x);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.y);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.z);
             }
             if (in_rendering_config.rendering_options.test(TEXTURE))
             {
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.x);
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.y);
-                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.z);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.x);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.y);
+                p_vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.z);
             }
         }
 
         glGenBuffers(1, &io_rendering_data.vertex_buffer_id);
         glBindBuffer(GL_ARRAY_BUFFER, io_rendering_data.vertex_buffer_id);
-        glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * vertex_data_size * sizeof(GLfloat), vertex_buffer, gl_draw_method);
+        glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * vertex_data_size * sizeof(GLfloat), p_vertex_buffer, gl_draw_method);
+        
+        delete [] p_vertex_buffer;
 
         // IBO
         if (in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
@@ -981,9 +983,9 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
 //////////////////////////////////////////////////////////////////////////////
 void generate_bench_rendering_config_list(std::deque< RenderingConfig >& in_rendering_config_list, unsigned int in_nb_triangles)
 {
-    for (unsigned int rendering_method = IMMEDIATE; rendering_method < DYNAMIC_VBO; ++rendering_method)
+    for (unsigned int rendering_method = IMMEDIATE; rendering_method < NB_RENDERING_METHOD; ++rendering_method)
     {
-        for (unsigned int rendering_options = 0 ; rendering_options != (1U << WIREFRAME)-1; ++rendering_options)
+        for (unsigned int rendering_options = 0 ; rendering_options != (1U << NB_BENCH_RENDERING_OPTION); ++rendering_options)
         {
             RenderingConfig rendering_config;
             rendering_config.nb_triangles = in_nb_triangles;

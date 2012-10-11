@@ -78,7 +78,9 @@ enum RenderingMethod
     IMMEDIATE,
     CALL_LIST,
     STATIC_VBO,
-    DYNAMIC_VBO
+    DYNAMIC_VBO,
+    
+    NB_RENDERING_METHOD
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -90,6 +92,9 @@ enum RenderingOption
     TEXTURE,
     SMOOTH_SHADING,
     BACK_FACE_PAINTING,
+    
+    NB_BENCH_RENDERING_OPTION,
+    
     WIREFRAME,
     
     NB_RENDERING_OPTION
