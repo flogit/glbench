@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-Wall -Wextra -W -g -I/usr/include/SDL
+CFLAGS=-Wall -Wextra -W -O3 -I/usr/include/SDL
 LDFLAGS=-lSDL -lGL -lGLU
 EXEC=glbench
 

@@ -113,7 +113,7 @@ int main(int, char**)
         // Event handler function
         event_type = event_sdl(display_config, rendering_config);
 
-        if (event_type == RENDERING_CONFIG_CHANGED)
+        if (!bench_mode &&  event_type == RENDERING_CONFIG_CHANGED)
         {
             first_frame = true;
             generate_model(rendering_config, rendering_data);
