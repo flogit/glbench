@@ -17,6 +17,9 @@
 
 #include <sys/time.h>
 
+#include <deque>
+#include <bitset>
+
 ////////////////////////////////////////////////////////////////////////
 // Vector structure
 ////////////////////////////////////////////////////////////////////////
@@ -58,13 +61,38 @@ struct Geometry
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-enum E_RenderingMethod
+enum EventType
+{
+    NO_EVENT,
+    QUIT_REQUESTED,
+    BENCH_REQUESTED,
+    RENDERING_CONFIG_CHANGED
+};
+
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+enum RenderingMethod
 {
     INVALID = 0,
     IMMEDIATE,
     CALL_LIST,
     STATIC_VBO,
     DYNAMIC_VBO
+};
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+enum RenderingOption
+{
+    TRIANGLE_STRIP = 0,
+    COLOR,
+    TEXTURE,
+    SMOOTH_SHADING,
+    BACK_FACE_PAINTING,
+    WIREFRAME,
+    
+    NB_RENDERING_OPTION
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -82,14 +110,10 @@ struct DisplayConfig
 
 struct RenderingConfig
 {
-    E_RenderingMethod rendering_method;
+    RenderingMethod rendering_method;
     unsigned int nb_triangles;
-    bool triangle_strip;
-    bool color;
-    bool texture;
-    bool smooth_shading;
-    bool back_face_painting;
-    bool wireframe;
+    
+    std::bitset<NB_RENDERING_OPTION> rendering_options;
 };
 
 struct RenderingData
@@ -112,9 +136,10 @@ void init_sdl(const DisplayConfig& in_display_config);
 void init_gl_extensions();
 void init_gl(RenderingData& in_rendering_data, const DisplayConfig& in_display_config, const RenderingConfig& in_rendering_config);
 
-bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_config, bool& out_quit_requested);
+EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_config);
 
-void print_config(const RenderingConfig& in_rendering_config);
+void print_config(const RenderingConfig& in_rendering_config, std::ostream& out_stream);
+void print_rendering_time (std::ostream& out_stream, unsigned int in_nb_triangles, const std::deque<long>& in_rendering_times);
 
 Vector3d compute_normal(const Vector3d& in_v1, const Vector3d& in_v2, const Vector3d& in_v3);
 void fill_normal(std::vector<Vertex>& out_vertices, unsigned int in_id1, unsigned int in_id2, unsigned int in_id3);
@@ -133,3 +158,5 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
 void paint_gl(const RenderingConfig& in_rendering_config, const Vertex& in_vertex);
 
 void render(const RenderingData& in_rendering_data, const RenderingConfig& in_rendering_config, const DisplayConfig& in_display_config);
+
+void generate_bench_rendering_config_list(std::deque<RenderingConfig>& in_rendering_config_list, unsigned int in_nb_triangles);

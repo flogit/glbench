@@ -14,6 +14,7 @@
 //    along with glBench.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 #include <deque>
@@ -40,22 +41,27 @@ PFNGLBINDBUFFERPROC    glBindBuffer    = 0;
 PFNGLBUFFERDATAPROC    glBufferData    = 0;
 PFNGLDELETEBUFFERSPROC glDeleteBuffers = 0;
 
+const unsigned int NB_MIN_FRAME = 30;
+
+const double default_rotation_angle_x = -10.0;  
+const double default_rotation_angle_y = -20.0;  
+
+const char* BENCH_FILE = "bench.txt";
+
 ////////////////////////////////////////////////////////////////////////
 int main(int, char**)
 {
     std::cout << "X--------------------------------------------------X" << std::endl;
     std::cout << "|                   GlBench v1.0                   |" << std::endl;
     std::cout << "|                                                  |" << std::endl;
-    std::cout << "|  - 'Space' to enable/disable rotation of model   |" << std::endl;
-    std::cout << "|    but disable it when making accurate benchmark |" << std::endl;
-    std::cout << "X--------------------------------------------------X" << std::endl;
+    std::cout << "|  - 'Space' to enable/disable rotation of model   |" ;
 
     // Default display config
     struct DisplayConfig display_config;
     display_config.g_windows_width  = 600;
     display_config.g_windows_height = 600;
-    display_config.g_rotation_angle_y = 0.0;
-    display_config.g_rotation_angle_x = -20.0;
+    display_config.g_rotation_angle_y = default_rotation_angle_y;
+    display_config.g_rotation_angle_x = default_rotation_angle_x;
     display_config.g_move_forward = -1.5;
     display_config.g_rotation = true;
 
@@ -63,12 +69,11 @@ int main(int, char**)
     struct RenderingConfig rendering_config;
     rendering_config.rendering_method = CALL_LIST;
     rendering_config.nb_triangles = 320000;
-    rendering_config.triangle_strip = true;
-    rendering_config.color = true;
-    rendering_config.texture = false;
-    rendering_config.smooth_shading = true;
-    rendering_config.back_face_painting = true;
-    rendering_config.wireframe = false;
+    rendering_config.rendering_options.reset();
+    rendering_config.rendering_options.set(TRIANGLE_STRIP);
+    rendering_config.rendering_options.set(COLOR);
+    rendering_config.rendering_options.set(SMOOTH_SHADING);
+    rendering_config.rendering_options.set(BACK_FACE_PAINTING);
 
     // Default rendering data
     struct RenderingData rendering_data;
@@ -82,35 +87,109 @@ int main(int, char**)
     init_gl_extensions();
     generate_model(rendering_config, rendering_data);
     init_gl(rendering_data, display_config, rendering_config);
-    print_config(rendering_config);
+    print_config(rendering_config, std::cout);
 
-    bool quit_requested = false;
     std::deque<long> rendering_times;
     bool first_frame = true;
 
-    // Main loop
-    do
+    EventType event_type = NO_EVENT;
+    
+    // Bench 
+    bool bench_mode = false;
+    std::deque<RenderingConfig> bench_rendering_config_list;
+    std::ofstream   bench_stream;
+    unsigned int    bench_rendering_config_nb = 0;
+    bool exit_bench = false;
+    
+    // Current config
+    RenderingConfig* p_current_rendering_config = &rendering_config;
+    std::ostream*    p_current_stream = &std::cout;
+    
+    struct timeval start;
+    struct timeval end;
+    
+    do // Main loop
     {
         // Event handler function
-        bool rendering_rendering_config_has_changed = event_sdl(display_config, rendering_config, quit_requested);
+        event_type = event_sdl(display_config, rendering_config);
 
-        if (rendering_rendering_config_has_changed)
+        if (event_type == RENDERING_CONFIG_CHANGED)
         {
             first_frame = true;
             generate_model(rendering_config, rendering_data);
             init_gl(rendering_data, display_config, rendering_config);
             rendering_times.clear();
-            std::cout << std::endl << "------------------------------------------------------" << std::endl;
-            print_config(rendering_config);
+            print_config(rendering_config, *p_current_stream);
         }
-
-        struct timeval start;
+        else if (event_type == BENCH_REQUESTED)
+        {
+            rendering_times.clear();
+            if (bench_mode == false) //enter in bench mode
+            {
+                bench_mode = true;
+                generate_bench_rendering_config_list(bench_rendering_config_list, rendering_config.nb_triangles);
+                bench_rendering_config_nb = bench_rendering_config_list.size();
+                
+                p_current_rendering_config = &bench_rendering_config_list.front();
+                
+                display_config.g_rotation = false;
+                display_config.g_rotation_angle_x = default_rotation_angle_x;
+                display_config.g_rotation_angle_y = default_rotation_angle_y;
+                
+                bench_stream.open(BENCH_FILE);
+                p_current_stream = &bench_stream;
+                
+                std::cout << std::endl << "X--------------------------------------------------X" << std::endl;
+                std::cout << "| Bench started " << std::endl;
+            }
+            else // leave it
+            {
+                exit_bench = true;
+            }
+        }
+        
+        if (bench_mode && rendering_times.size() == NB_MIN_FRAME)
+        {
+            //print bench results
+            print_config(*p_current_rendering_config, (*p_current_stream));
+            print_rendering_time (*p_current_stream, p_current_rendering_config->nb_triangles, rendering_times);
+            
+            rendering_times.clear();
+            bench_rendering_config_list.pop_front();
+            if (!bench_rendering_config_list.empty())
+            {
+                p_current_rendering_config = &bench_rendering_config_list.front();
+                init_gl(rendering_data, display_config, *p_current_rendering_config);
+            }
+            else
+            {
+                exit_bench = true;
+            }
+            std::cout << '\r' << "| Bench completion : " << 100 - (100 * bench_rendering_config_list.size() / bench_rendering_config_nb) << " %" << std::flush;
+        }
+        
+        if (exit_bench)
+        {
+            bench_mode = false;
+            exit_bench = false;
+            
+            std::cout << std::endl << "| Bench exit ";
+            
+            p_current_rendering_config = &rendering_config;
+            display_config.g_rotation = true;
+            
+            bench_stream.close();
+            p_current_stream = &std::cout;
+            
+            print_config(*p_current_rendering_config, (*p_current_stream));
+            init_gl(rendering_data, display_config, *p_current_rendering_config);
+         }
+        
         gettimeofday(&start, NULL);
 
         // Render function
-        render(rendering_data, rendering_config, display_config);
+        render(rendering_data, *p_current_rendering_config, display_config);
 
-        struct timeval end;
         gettimeofday(&end, NULL);
 
         // First frame is longer to process, skip it fir the time benchmarking
@@ -123,25 +202,18 @@ int main(int, char**)
         {
             long current_rendering_time = elapsed_time(start, end);
 
-            if (rendering_times.size() >= 30)
+            if (rendering_times.size() >= NB_MIN_FRAME)
             {
                 rendering_times.pop_back();
             }
             rendering_times.push_front(current_rendering_time);
 
-            double mean_rendering_time = 0.0;
-            for (std::deque<long>::const_iterator it = rendering_times.begin(); it != rendering_times.end(); ++it)
+            // display rendering time
+            if (!bench_mode)
             {
-                mean_rendering_time += static_cast<double>(*it);
+                (*p_current_stream) << "\r";
+                print_rendering_time (*p_current_stream, p_current_rendering_config->nb_triangles, rendering_times);
             }
-            mean_rendering_time = mean_rendering_time / static_cast<double>(rendering_times.size());
-
-            std::cout << "\r" << rendering_config.nb_triangles << " triangles rendered in " << static_cast<unsigned int>(mean_rendering_time + 0.5) << " ms";
-            if (rendering_times.size() < 30)
-            {
-                std::cout << "*";
-            }
-            std::cout << "      " << std::flush;
 
             if (display_config.g_rotation)
             {
@@ -155,7 +227,7 @@ int main(int, char**)
             std::cout << "Warning : Opengl error (" << error << ")" << std::endl;
         }
 
-    } while (!quit_requested);
+    } while (event_type != QUIT_REQUESTED);
 
     std::cout << std::endl;
 
@@ -206,7 +278,7 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
 {
     glViewport(0 , 0, static_cast<GLsizei>(in_display_config.g_windows_width), static_cast<GLsizei>(in_display_config.g_windows_height));
 
-    if (in_rendering_config.wireframe)
+    if (in_rendering_config.rendering_options.test(WIREFRAME))
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     }
@@ -223,7 +295,7 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
     glEnable(GL_COLOR_MATERIAL);
 
     // Back face painting
-    if (in_rendering_config.back_face_painting)
+    if (in_rendering_config.rendering_options.test(BACK_FACE_PAINTING))
     {
         glDisable(GL_CULL_FACE);
         glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
@@ -236,7 +308,7 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
     }
 
     // Texturing
-    if (in_rendering_config.texture)
+    if (in_rendering_config.rendering_options.test(TEXTURE))
     {
         glEnable(GL_TEXTURE_2D);
     }
@@ -246,7 +318,7 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
     }
 
     // Smooth shading
-    glShadeModel(in_rendering_config.smooth_shading ? GL_SMOOTH : GL_FLAT);
+    glShadeModel(in_rendering_config.rendering_options.test(SMOOTH_SHADING) ? GL_SMOOTH : GL_FLAT);
 
     process_texturing(io_rendering_data, in_rendering_config);
     process_call_list(io_rendering_data, in_rendering_config);
@@ -254,18 +326,21 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
 }
 
 ////////////////////////////////////////////////////////////////////////
-bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_config, bool& out_quit_requested)
+EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_config)
 {
     static int mouse_current_position_x = -1;
     static int mouse_current_position_y = -1;
     static bool mouse_left_button_down = false;
 
-    bool rendering_config_has_changed = false;
+    EventType event_type = NO_EVENT;
 
     SDL_PumpEvents();                       // load all the events
 
     SDL_Event event;
-    while (SDL_PollEvent(&event))           // poll event by event
+
+    while (event_type != QUIT_REQUESTED 
+           && 
+           SDL_PollEvent(&event))           // poll event by event
     {
         switch (event.type)
         {
@@ -275,14 +350,14 @@ bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_c
                 {
                     case SDLK_q:
                     case SDLK_ESCAPE:
-                        out_quit_requested = true;
+                        event_type = QUIT_REQUESTED;
                         break;
 
                     case SDLK_EQUALS:
                     case SDLK_PLUS:
                     case SDLK_KP_PLUS:
                         io_rendering_config.nb_triangles *= 2;
-                        rendering_config_has_changed = true;
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
 
                     case SDLK_MINUS:
@@ -291,42 +366,45 @@ bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_c
                         {
                             io_rendering_config.nb_triangles /= 2;
                         }
-                        rendering_config_has_changed = true;
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_w:
-                        io_rendering_config.wireframe = !io_rendering_config.wireframe;
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_options.flip(WIREFRAME);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_m:
-                        io_rendering_config.smooth_shading = !io_rendering_config.smooth_shading;
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_options.flip(SMOOTH_SHADING);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_c:
-                        io_rendering_config.color = !io_rendering_config.color;
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_options.flip(COLOR);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_t:
-                        io_rendering_config.texture = !io_rendering_config.texture;
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_options.flip(TEXTURE);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
-                    case SDLK_b:
-                        io_rendering_config.back_face_painting = !io_rendering_config.back_face_painting;
-                        rendering_config_has_changed = true;
+                    case SDLK_p:
+                        io_rendering_config.rendering_options.flip(BACK_FACE_PAINTING);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_s:
-                        io_rendering_config.triangle_strip = !io_rendering_config.triangle_strip;
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_options.flip(TRIANGLE_STRIP);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_F1:
                     case SDLK_F2:
                     case SDLK_F3:
                     case SDLK_F4:
-                        io_rendering_config.rendering_method = static_cast<E_RenderingMethod>(event.key.keysym.sym - SDLK_F1 + 1);
-                        rendering_config_has_changed = true;
+                        io_rendering_config.rendering_method = static_cast<RenderingMethod>(event.key.keysym.sym - SDLK_F1 + 1);
+                        event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_SPACE:
                         io_display_config.g_rotation = !io_display_config.g_rotation;
                         break;
+                    case SDLK_b:
+                        event_type = BENCH_REQUESTED;
+                        
                     default:
                         break;
                 }
@@ -379,7 +457,7 @@ bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_c
 
             ///////////////////////////////////
             case SDL_QUIT:                  // Quit resquested : "close button" of the window
-                out_quit_requested = true;
+                event_type = QUIT_REQUESTED;
                 break;
 
             ///////////////////////////////////
@@ -388,29 +466,48 @@ bool event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_rendering_c
         }
     }
 
-    return rendering_config_has_changed;
+    return event_type;
 }
 
 ////////////////////////////////////////////////////////////////////////
-void print_config(const RenderingConfig& in_rendering_config)
+void print_config(const RenderingConfig& in_rendering_config, std::ostream& out_stream)
 {
-    std::cout << " - ('F1/2/3/4') Rendering method .. ";
+    out_stream << std::endl << "X--------------------------------------------------X" << std::endl;
+    out_stream << " - ('F1/2/3/4') Rendering method .. ";
     if (in_rendering_config.rendering_method == IMMEDIATE)
-        std::cout << "Immediate" << std::endl;
+        out_stream << "Immediate" << std::endl;
     else if (in_rendering_config.rendering_method == CALL_LIST)
-        std::cout << "Call list" << std::endl;
+        out_stream << "Call list" << std::endl;
     else if (in_rendering_config.rendering_method == STATIC_VBO)
-        std::cout << "Static VBO" << std::endl;
+        out_stream << "Static VBO" << std::endl;
     else if (in_rendering_config.rendering_method == DYNAMIC_VBO)
-        std::cout << "Dynamic VBO" << std::endl;
+        out_stream << "Dynamic VBO" << std::endl;
     else
-        std::cout << "Not yet implemented" << std::endl;
-    std::cout << " - ('s') Triangles strip mode ..... " << in_rendering_config.triangle_strip << std::endl;
-    std::cout << " - ('c') Colored model ............ " << in_rendering_config.color << std::endl;
-    std::cout << " - ('t') Textured model ........... " << in_rendering_config.texture << std::endl;
-    std::cout << " - ('m') Smooth shading ........... " << in_rendering_config.smooth_shading << std::endl;
-    std::cout << " - ('b') Back face painting ....... " << in_rendering_config.back_face_painting << std::endl;
-    std::cout << " - ('w') Wireframe model .......... " << in_rendering_config.wireframe << std::endl;
+        out_stream << "Not yet implemented" << std::endl;
+    out_stream << " - ('s') Triangles strip mode ..... " << in_rendering_config.rendering_options.test(TRIANGLE_STRIP) << std::endl;
+    out_stream << " - ('c') Colored model ............ " << in_rendering_config.rendering_options.test(COLOR) << std::endl;
+    out_stream << " - ('t') Textured model ........... " << in_rendering_config.rendering_options.test(TEXTURE) << std::endl;
+    out_stream << " - ('m') Smooth shading ........... " << in_rendering_config.rendering_options.test(SMOOTH_SHADING) << std::endl;
+    out_stream << " - ('p') Back face painting ....... " << in_rendering_config.rendering_options.test(BACK_FACE_PAINTING) << std::endl;
+    out_stream << " - ('w') Wireframe model .......... " << in_rendering_config.rendering_options.test(WIREFRAME) << std::endl;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void print_rendering_time (std::ostream& out_stream, unsigned int in_nb_triangles, const std::deque<long>& in_rendering_times)
+{
+    double mean_rendering_time = 0.0;
+    for (std::deque<long>::const_iterator it = in_rendering_times.begin(); it != in_rendering_times.end(); ++it)
+    {
+        mean_rendering_time += static_cast<double>(*it);
+    }
+    mean_rendering_time = mean_rendering_time / static_cast<double>(in_rendering_times.size());
+                    
+    out_stream << in_nb_triangles << " triangles rendered in " << static_cast<unsigned int>(mean_rendering_time + 0.5) << " ms";
+    if (in_rendering_times.size() < NB_MIN_FRAME)
+    {
+        out_stream << '*';
+    }
+    out_stream << "      " << std::flush;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -525,7 +622,7 @@ void process_texturing(RenderingData& io_rendering_data, const RenderingConfig& 
 {
     delete_texturing(io_rendering_data);
 
-    if (in_rendering_config.texture)
+    if (in_rendering_config.rendering_options.test(TEXTURE))
     {
         glGenTextures(1, &io_rendering_data.texture_id);
         glBindTexture(GL_TEXTURE_2D, io_rendering_data.texture_id);
@@ -586,11 +683,11 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
         const int gl_draw_method = (in_rendering_config.rendering_method == DYNAMIC_VBO) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
 
         unsigned int vertex_data_size = 6;
-        if (in_rendering_config.color)
+        if (in_rendering_config.rendering_options.test(COLOR))
         {
             vertex_data_size += 3;
         }
-        if (in_rendering_config.texture)
+        if (in_rendering_config.rendering_options.test(TEXTURE))
         {
             vertex_data_size += 3;
         }
@@ -606,13 +703,13 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
             vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.x);
             vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.y);
             vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.z);
-            if (in_rendering_config.color)
+            if (in_rendering_config.rendering_options.test(COLOR))
             {
                 vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.x);
                 vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.y);
                 vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.z);
             }
-            if (in_rendering_config.texture)
+            if (in_rendering_config.rendering_options.test(TEXTURE))
             {
                 vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.x);
                 vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.y);
@@ -625,7 +722,7 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
         glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * vertex_data_size * sizeof(GLfloat), vertex_buffer, gl_draw_method);
 
         // IBO
-        if (in_rendering_config.triangle_strip)
+        if (in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
         {
             unsigned int nb_index = 0;
             for (std::list<TriangleStrip>::const_iterator it = io_rendering_data.geometry.triangles_strip.begin(); it != io_rendering_data.geometry.triangles_strip.end(); ++it)
@@ -695,13 +792,13 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
         glEnableClientState(GL_NORMAL_ARRAY);
         glNormalPointer(GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
         buffer_offset += 12;
-        if (in_rendering_config.color)
+        if (in_rendering_config.rendering_options.test(COLOR))
         {
             glEnableClientState(GL_COLOR_ARRAY);
             glColorPointer(3, GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
             buffer_offset += 12;
         }
-        if (in_rendering_config.texture)
+        if (in_rendering_config.rendering_options.test(TEXTURE))
         {
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
             glTexCoordPointer(3, GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
@@ -742,12 +839,12 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
 {
     if (!in_geometry.triangles_strip.empty())
     {
-        if (!in_rendering_config.color)
+        if (!in_rendering_config.rendering_options.test(COLOR))
         {
             glColor3d(1.0, 1.0, 1.0);
         }
 
-        if (!in_rendering_config.triangle_strip)
+        if (!in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
         {
             glBegin(GL_TRIANGLES);
         }
@@ -757,7 +854,7 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
         {
             const TriangleStrip& triangle = *it;
 
-            if (in_rendering_config.triangle_strip)
+            if (in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
             {
                 glBegin(GL_TRIANGLE_STRIP);
 
@@ -786,7 +883,7 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
                 }
             }
         }
-        if (!in_rendering_config.triangle_strip)
+        if (!in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
         {
             glEnd();
         }
@@ -798,11 +895,11 @@ void paint_gl(const RenderingConfig& in_rendering_config, const Vertex& in_verte
 {
     if (in_rendering_config.rendering_method == IMMEDIATE || in_rendering_config.rendering_method == CALL_LIST)
     {
-        if (in_rendering_config.color)
+        if (in_rendering_config.rendering_options.test(COLOR))
         {
             glColor3d(in_vertex.color.x, in_vertex.color.y, in_vertex.color.z);
         }
-        if (in_rendering_config.texture)
+        if (in_rendering_config.rendering_options.test(TEXTURE))
         {
             glTexCoord2d(in_vertex.texture_coordinate.x, in_vertex.texture_coordinate.y);
         }
@@ -854,7 +951,7 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
     }
     else if (in_rendering_config.rendering_method == DYNAMIC_VBO || in_rendering_config.rendering_method == STATIC_VBO)
     {
-        if (!in_rendering_config.color)
+        if (!in_rendering_config.rendering_options.test(COLOR))
         {
             glColor3d(1.0, 1.0, 1.0);
         }
@@ -862,7 +959,7 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
         size_t offset = 0;
         for (std::list<TriangleStrip>::const_iterator it = in_rendering_data.geometry.triangles_strip.begin(); it != in_rendering_data.geometry.triangles_strip.end(); ++it)
         {
-            if (in_rendering_config.triangle_strip)
+            if (in_rendering_config.rendering_options.test(TRIANGLE_STRIP))
             {
                 const unsigned int vertex_ids_size = (*it).vertex_ids.size();
                 glDrawElements(GL_TRIANGLE_STRIP, vertex_ids_size, GL_UNSIGNED_INT, BUFFER_OFFSET_CAST(offset));
@@ -879,4 +976,21 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
 
     glFlush();
     SDL_GL_SwapBuffers();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+void generate_bench_rendering_config_list(std::deque< RenderingConfig >& in_rendering_config_list, unsigned int in_nb_triangles)
+{
+    for (unsigned int rendering_method = IMMEDIATE; rendering_method < DYNAMIC_VBO; ++rendering_method)
+    {
+        for (unsigned int rendering_options = 0 ; rendering_options != (1U << WIREFRAME)-1; ++rendering_options)
+        {
+            RenderingConfig rendering_config;
+            rendering_config.nb_triangles = in_nb_triangles;
+            rendering_config.rendering_method = static_cast<RenderingMethod> (rendering_method);
+            rendering_config.rendering_options = rendering_options;
+            
+            in_rendering_config_list.push_back(rendering_config);
+        }
+    }
 }
