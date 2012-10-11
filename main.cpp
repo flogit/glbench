@@ -30,7 +30,7 @@
 
 #include "main.h"
 
-#define BUFFER_OFFSET(i) reinterpret_cast<void*>(i)
+#define BUFFER_OFFSET_CAST(i) reinterpret_cast<void*>(i)
 
 ////////////////////////////////////////////////////////////////////////
 // GL extensions for VBO
@@ -56,7 +56,7 @@ int main(int, char**)
     display_config.g_windows_height = 600;
     display_config.g_rotation_angle_y = 0.0;
     display_config.g_rotation_angle_x = -20.0;
-    display_config.g_move_forward = -2.0;
+    display_config.g_move_forward = -1.5;
     display_config.g_rotation = true;
 
     // Default rendering config
@@ -248,7 +248,7 @@ void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_c
     // Smooth shading
     glShadeModel(in_rendering_config.smooth_shading ? GL_SMOOTH : GL_FLAT);
 
-    process_immediate_and_call_list(io_rendering_data, in_rendering_config);
+    process_texturing(io_rendering_data, in_rendering_config);
     process_call_list(io_rendering_data, in_rendering_config);
     process_vbo(io_rendering_data, in_rendering_config);
 }
@@ -443,6 +443,8 @@ void generate_model(const RenderingConfig& in_rendering_config, RenderingData& o
 
     const unsigned int nb_subdivisions = static_cast<int>(sqrt(static_cast<double>(in_rendering_config.nb_triangles) / 2.0) + 0.5);
 
+    const double texture_coef = 10.0;
+
     // Vertex generation
     for (unsigned int i = 0; i <= nb_subdivisions; ++i)
     {
@@ -450,7 +452,7 @@ void generate_model(const RenderingConfig& in_rendering_config, RenderingData& o
 
         const Vector3d color(1.0 - ratio_i, ratio_i, 1.0 - ratio_i);
 
-        for (unsigned int j = 0; j < nb_subdivisions; ++j)
+        for (unsigned int j = 0; j <= nb_subdivisions; ++j)
         {
             double ratio_j = static_cast<double>(j) / static_cast<double>(nb_subdivisions);
 
@@ -465,12 +467,11 @@ void generate_model(const RenderingConfig& in_rendering_config, RenderingData& o
             v.coord  = Vector3d(cos(theta) * cos(phi), cos(theta) * sin(phi), sin(theta) * cos(theta));
             v.color  = color;
             v.normal = Vector3d(0.0, 0.0, 0.0);
+            v.texture_coordinate = Vector3d(texture_coef * ratio_i, texture_coef * ratio_j, 0.0);
 
             out_rendering_data.geometry.vertices.push_back(v);
         }
     }
-
-    const double texture_coef = 10.0;
 
     // Triangle and Vertex's normal generation
     // Compute the normal direction of each vertex with the sum of neighbor triangle's normal
@@ -479,73 +480,69 @@ void generate_model(const RenderingConfig& in_rendering_config, RenderingData& o
         TriangleStrip triangle_strip;
         for (unsigned int j = 0; j <= nb_subdivisions; ++j)
         {
-            triangle_strip.vertex_ids.push_back(j % nb_subdivisions + (i + 1) * nb_subdivisions);
-            triangle_strip.vertex_ids.push_back(j % nb_subdivisions + i * nb_subdivisions);
-
-            triangle_strip.texture_coordinates.push_back(Vector3d(texture_coef * static_cast<double>(j)     / static_cast<double>(nb_subdivisions),
-                                                                  texture_coef * static_cast<double>(i + 1) / static_cast<double>(nb_subdivisions),
-                                                                  0.0));
-            triangle_strip.texture_coordinates.push_back(Vector3d(texture_coef * static_cast<double>(j) / static_cast<double>(nb_subdivisions),
-                                                                  texture_coef * static_cast<double>(i) / static_cast<double>(nb_subdivisions),
-                                                                  0.0));
+            triangle_strip.vertex_ids.push_back(j + (i + 1) * (nb_subdivisions + 1));
+            triangle_strip.vertex_ids.push_back(j +  i      * (nb_subdivisions + 1));
 
             if (j != nb_subdivisions)
             {
-                fill_normal(out_rendering_data.geometry.vertices, j % nb_subdivisions + i * nb_subdivisions,
-                            (j + 1) % nb_subdivisions + i * nb_subdivisions,
-                            j % nb_subdivisions + (i + 1) * nb_subdivisions);
-                fill_normal(out_rendering_data.geometry.vertices, j % nb_subdivisions + (i + 1) * nb_subdivisions,
-                            (j + 1) % nb_subdivisions + i * nb_subdivisions,
-                            (j + 1) % nb_subdivisions + (i + 1) * nb_subdivisions);
+                fill_normal(out_rendering_data.geometry.vertices,
+                            j + i * (nb_subdivisions + 1),
+                            (j + 1) + i * (nb_subdivisions + 1),
+                            j + (i + 1) * (nb_subdivisions + 1));
+                fill_normal(out_rendering_data.geometry.vertices,
+                            j + (i + 1) * (nb_subdivisions + 1),
+                            (j + 1) + i * (nb_subdivisions + 1),
+                            (j + 1) + (i + 1) * (nb_subdivisions + 1));
             }
         }
+
+        Vector3d sum_normal_extremum = out_rendering_data.geometry.vertices.at(i * (nb_subdivisions + 1)).normal + out_rendering_data.geometry.vertices.at(nb_subdivisions + i * (nb_subdivisions + 1)).normal;
+        out_rendering_data.geometry.vertices.at(i * (nb_subdivisions + 1)).normal = sum_normal_extremum;
+        out_rendering_data.geometry.vertices.at(nb_subdivisions + i * (nb_subdivisions + 1)).normal = sum_normal_extremum;
+
         out_rendering_data.geometry.triangles_strip.push_back(triangle_strip);
     }
 
     // Normalize the direction computed before, with the number of neighbor triangle
     for (unsigned int i = 0; i <= nb_subdivisions; ++i)
     {
-        for (unsigned int j = 0; j < nb_subdivisions; ++j)
+        for (unsigned int j = 0; j <= nb_subdivisions; ++j)
         {
             if (i == 0 || i == nb_subdivisions)
             {
-                out_rendering_data.geometry.vertices.at(j + i * nb_subdivisions).normal = out_rendering_data.geometry.vertices.at(j + i * nb_subdivisions).normal / 3.0;
+                out_rendering_data.geometry.vertices.at(j + i * (nb_subdivisions + 1)).normal = out_rendering_data.geometry.vertices.at(j + i * (nb_subdivisions + 1)).normal / 3.0;
             }
             else
             {
-                out_rendering_data.geometry.vertices.at(j + i * nb_subdivisions).normal = out_rendering_data.geometry.vertices.at(j + i * nb_subdivisions).normal / 6.0;
+                out_rendering_data.geometry.vertices.at(j + i * (nb_subdivisions + 1)).normal = out_rendering_data.geometry.vertices.at(j + i * (nb_subdivisions + 1)).normal / 6.0;
             }
         }
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
-void process_immediate_and_call_list(RenderingData& io_rendering_data, const RenderingConfig& in_rendering_config)
+void process_texturing(RenderingData& io_rendering_data, const RenderingConfig& in_rendering_config)
 {
-    delete_immediate_and_call_list(io_rendering_data);
+    delete_texturing(io_rendering_data);
 
-    if (in_rendering_config.rendering_method == IMMEDIATE || in_rendering_config.rendering_method == CALL_LIST)
+    if (in_rendering_config.texture)
     {
-        if (in_rendering_config.texture)
-        {
-            glGenTextures(1, &io_rendering_data.texture_id);
-            glBindTexture(GL_TEXTURE_2D, io_rendering_data.texture_id);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glGenTextures(1, &io_rendering_data.texture_id);
+        glBindTexture(GL_TEXTURE_2D, io_rendering_data.texture_id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-            GLubyte texture_data[16] = { 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0,
-                                         0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0 };
+        GLubyte texture_data[16] = { 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0,
+                                     0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0 };
 
-            gluBuild2DMipmaps(GL_TEXTURE_2D, 4, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
-
-        }
+        gluBuild2DMipmaps(GL_TEXTURE_2D, 4, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
     }
 }
 
 ////////////////////////////////////////////////////////////////////////
-void delete_immediate_and_call_list(RenderingData& io_rendering_data)
+void delete_texturing(RenderingData& io_rendering_data)
 {
     if (io_rendering_data.texture_id)
     {
@@ -586,26 +583,46 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
 
     if (in_rendering_config.rendering_method == STATIC_VBO || in_rendering_config.rendering_method == DYNAMIC_VBO)
     {
-        const int GL_DRAW_METHOD = (in_rendering_config.rendering_method == DYNAMIC_VBO) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
+        const int gl_draw_method = (in_rendering_config.rendering_method == DYNAMIC_VBO) ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW;
+
+        unsigned int vertex_data_size = 6;
+        if (in_rendering_config.color)
+        {
+            vertex_data_size += 3;
+        }
+        if (in_rendering_config.texture)
+        {
+            vertex_data_size += 3;
+        }
 
         // VBO
-        GLfloat *vertex_buffer = new GLfloat[io_rendering_data.geometry.vertices.size() * 9];
+        GLfloat *vertex_buffer = new GLfloat[io_rendering_data.geometry.vertices.size() * vertex_data_size];
+        unsigned int offset = 0;
         for (unsigned int i = 0; i < io_rendering_data.geometry.vertices.size(); ++i)
         {
-            vertex_buffer[9 * i + 0] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.x);
-            vertex_buffer[9 * i + 1] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.y);
-            vertex_buffer[9 * i + 2] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.z);
-            vertex_buffer[9 * i + 3] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.x);
-            vertex_buffer[9 * i + 4] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.y);
-            vertex_buffer[9 * i + 5] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.z);
-            vertex_buffer[9 * i + 6] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.x);
-            vertex_buffer[9 * i + 7] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.y);
-            vertex_buffer[9 * i + 8] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.z);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.x);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.y);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).coord.z);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.x);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.y);
+            vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).normal.z);
+            if (in_rendering_config.color)
+            {
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.x);
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.y);
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).color.z);
+            }
+            if (in_rendering_config.texture)
+            {
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.x);
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.y);
+                vertex_buffer[offset++] = static_cast<GLfloat> (io_rendering_data.geometry.vertices.at(i).texture_coordinate.z);
+            }
         }
 
         glGenBuffers(1, &io_rendering_data.vertex_buffer_id);
         glBindBuffer(GL_ARRAY_BUFFER, io_rendering_data.vertex_buffer_id);
-        glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * 9 * sizeof(GLfloat), vertex_buffer, GL_DRAW_METHOD);
+        glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * vertex_data_size * sizeof(GLfloat), vertex_buffer, gl_draw_method);
 
         // IBO
         if (in_rendering_config.triangle_strip)
@@ -615,29 +632,23 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
             {
                 nb_index += (*it).vertex_ids.size();
             }
-            GLuint *index_buffer = new GLuint[nb_index];
+            GLuint *p_index_buffer = new GLuint[nb_index];
 
             unsigned int offset = 0;
             for (std::list<TriangleStrip>::const_iterator it = io_rendering_data.geometry.triangles_strip.begin(); it != io_rendering_data.geometry.triangles_strip.end(); ++it)
             {
                 for (unsigned int j = 0; j < (*it).vertex_ids.size(); ++j)
                 {
-                    index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(j));
+                    p_index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(j));
                     ++offset;
                 }
             }
 
             glGenBuffers(1, &io_rendering_data.index_buffer_id);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, io_rendering_data.index_buffer_id);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, nb_index * sizeof(GLuint), index_buffer, GL_DRAW_METHOD);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, nb_index * sizeof(GLuint), p_index_buffer, gl_draw_method);
 
-            // Enable client state
-            glEnableClientState(GL_VERTEX_ARRAY);
-            glVertexPointer(3, GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(0));       //The starting point of the VBO, for the vertices
-            glEnableClientState(GL_COLOR_ARRAY);
-            glColorPointer(3, GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(12));       //The starting point of color, 12 bytes away
-            glEnableClientState(GL_NORMAL_ARRAY);
-            glNormalPointer(GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(24));         //The starting point of normals, 24 bytes away
+            delete[] p_index_buffer;
         }
         else
         {
@@ -646,7 +657,7 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
             {
                 nb_index += ((*it).vertex_ids.size() - 2) * 3;
             }
-            GLuint *index_buffer = new GLuint[nb_index];
+            GLuint *p_index_buffer = new GLuint[nb_index];
 
             unsigned int offset = 0;
             for (std::list<TriangleStrip>::const_iterator it = io_rendering_data.geometry.triangles_strip.begin(); it != io_rendering_data.geometry.triangles_strip.end(); ++it)
@@ -657,12 +668,12 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
                     {
                         if (i % 2 == 0)
                         {
-                            index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(i + j));
+                            p_index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(i + j));
                             ++offset;
                         }
                         else
                         {
-                            index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(i + 2 - j));
+                            p_index_buffer[offset] = static_cast<GLuint>((*it).vertex_ids.at(i + 2 - j));
                             ++offset;
                         }
                     }
@@ -671,15 +682,30 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
 
             glGenBuffers(1, &io_rendering_data.index_buffer_id);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, io_rendering_data.index_buffer_id);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, nb_index * sizeof(GLuint), index_buffer, GL_DRAW_METHOD);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, nb_index * sizeof(GLuint), p_index_buffer, gl_draw_method);
 
-            // Enable client state
-            glEnableClientState(GL_VERTEX_ARRAY);
-            glVertexPointer(3, GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(0));       //The starting point of the VBO, for the vertices
+            delete[] p_index_buffer;
+        }
+
+        // Enable client state
+        unsigned int buffer_offset = 0;
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glVertexPointer(3, GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
+        buffer_offset += 12;
+        glEnableClientState(GL_NORMAL_ARRAY);
+        glNormalPointer(GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
+        buffer_offset += 12;
+        if (in_rendering_config.color)
+        {
             glEnableClientState(GL_COLOR_ARRAY);
-            glColorPointer(3, GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(12));       //The starting point of color, 12 bytes away
-            glEnableClientState(GL_NORMAL_ARRAY);
-            glNormalPointer(GL_FLOAT, 9 * sizeof(GLfloat), BUFFER_OFFSET(24));         //The starting point of normals, 24 bytes away
+            glColorPointer(3, GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
+            buffer_offset += 12;
+        }
+        if (in_rendering_config.texture)
+        {
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glTexCoordPointer(3, GL_FLOAT, vertex_data_size * sizeof(GLfloat), BUFFER_OFFSET_CAST(buffer_offset));
+            buffer_offset += 12;
         }
     }
 }
@@ -695,6 +721,7 @@ void delete_vbo(RenderingData& io_rendering_data)
             glDisableClientState(GL_VERTEX_ARRAY);
             glDisableClientState(GL_COLOR_ARRAY);
             glDisableClientState(GL_NORMAL_ARRAY);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
             // Unbind and delete buffer
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             glDeleteBuffers(1, &io_rendering_data.vertex_buffer_id);
@@ -736,9 +763,6 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
 
                 for (unsigned int i = 0; i < triangle.vertex_ids.size(); ++i)    // for each vertices of the triangle
                 {
-                    glTexCoord2d(triangle.texture_coordinates[i].x,
-                                 triangle.texture_coordinates[i].y);
-
                     paint_gl(in_rendering_config, in_geometry.vertices.at(triangle.vertex_ids[i]));
                 }
 
@@ -752,16 +776,10 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
                     {
                         if (i % 2 == 0)
                         {
-                            glTexCoord2d(triangle.texture_coordinates[i + j].x,
-                                         triangle.texture_coordinates[i + j].y);
-
                             paint_gl(in_rendering_config, in_geometry.vertices.at(triangle.vertex_ids[i + j]));
                         }
                         else
                         {
-                            glTexCoord2d(triangle.texture_coordinates[i + 2 - j].x,
-                                         triangle.texture_coordinates[i + 2 - j].y);
-
                             paint_gl(in_rendering_config, in_geometry.vertices.at(triangle.vertex_ids[i + 2 - j]));
                         }
                     }
@@ -778,9 +796,16 @@ void paint_gl(const Geometry& in_geometry, const RenderingConfig& in_rendering_c
 ////////////////////////////////////////////////////////////////////////
 void paint_gl(const RenderingConfig& in_rendering_config, const Vertex& in_vertex)
 {
-    if (in_rendering_config.color)
+    if (in_rendering_config.rendering_method == IMMEDIATE || in_rendering_config.rendering_method == CALL_LIST)
     {
-        glColor3d(in_vertex.color.x, in_vertex.color.y, in_vertex.color.z);
+        if (in_rendering_config.color)
+        {
+            glColor3d(in_vertex.color.x, in_vertex.color.y, in_vertex.color.z);
+        }
+        if (in_rendering_config.texture)
+        {
+            glTexCoord2d(in_vertex.texture_coordinate.x, in_vertex.texture_coordinate.y);
+        }
     }
 
     glNormal3d(in_vertex.normal.x,
@@ -829,19 +854,24 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
     }
     else if (in_rendering_config.rendering_method == DYNAMIC_VBO || in_rendering_config.rendering_method == STATIC_VBO)
     {
+        if (!in_rendering_config.color)
+        {
+            glColor3d(1.0, 1.0, 1.0);
+        }
+
         size_t offset = 0;
         for (std::list<TriangleStrip>::const_iterator it = in_rendering_data.geometry.triangles_strip.begin(); it != in_rendering_data.geometry.triangles_strip.end(); ++it)
         {
             if (in_rendering_config.triangle_strip)
             {
                 const unsigned int vertex_ids_size = (*it).vertex_ids.size();
-                glDrawElements(GL_TRIANGLE_STRIP, vertex_ids_size, GL_UNSIGNED_INT, BUFFER_OFFSET(offset));
+                glDrawElements(GL_TRIANGLE_STRIP, vertex_ids_size, GL_UNSIGNED_INT, BUFFER_OFFSET_CAST(offset));
                 offset += vertex_ids_size * sizeof(GLuint);
             }
             else
             {
                 const unsigned int vertex_ids_size = ((*it).vertex_ids.size() - 2) * 3;
-                glDrawElements(GL_TRIANGLES, vertex_ids_size, GL_UNSIGNED_INT, BUFFER_OFFSET(offset));
+                glDrawElements(GL_TRIANGLES, vertex_ids_size, GL_UNSIGNED_INT, BUFFER_OFFSET_CAST(offset));
                 offset += vertex_ids_size * sizeof(GLuint);
             }
         }

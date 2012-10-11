@@ -42,12 +42,12 @@ struct Vertex
     Vector3d coord;
     Vector3d normal;
     Vector3d color;
+    Vector3d texture_coordinate;
 };
 
 struct TriangleStrip
 {
     std::vector<unsigned int> vertex_ids;
-    std::vector<Vector3d> texture_coordinates;
 };
 
 struct Geometry
@@ -120,8 +120,8 @@ Vector3d compute_normal(const Vector3d& in_v1, const Vector3d& in_v2, const Vect
 void fill_normal(std::vector<Vertex>& out_vertices, unsigned int in_id1, unsigned int in_id2, unsigned int in_id3);
 void generate_model(const RenderingConfig& in_rendering_config, RenderingData& out_rendering_data);
 
-void process_immediate_and_call_list(RenderingData& io_rendering_data, const RenderingConfig& in_rendering_config);
-void delete_immediate_and_call_list(RenderingData& io_rendering_data);
+void process_texturing(RenderingData& io_rendering_data, const RenderingConfig& in_rendering_config);
+void delete_texturing(RenderingData& io_rendering_data);
 
 void process_call_list(RenderingData& io_rendering_data, const RenderingConfig& in_rendering_config);
 void delete_call_list(RenderingData& io_rendering_data);
