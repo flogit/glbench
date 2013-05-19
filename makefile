@@ -11,10 +11,8 @@ glbench: main.o
 %.o: %.cpp %.h
 	$(CC) -o $@ -c $< $(CFLAGS)
 
-.PHONY: clean mrproper
+.PHONY: clean
 
 clean:
-	rm -rf *.o
+	rm -rf *.o $(EXEC)
 
-mrproper: clean
-	rm -rf $(EXEC)
