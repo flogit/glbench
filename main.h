@@ -79,7 +79,7 @@ enum RenderingMethod
     CALL_LIST,
     STATIC_VBO,
     DYNAMIC_VBO,
-    
+
     NB_RENDERING_METHOD
 };
 
@@ -92,11 +92,11 @@ enum RenderingOption
     TEXTURE,
     SMOOTH_SHADING,
     BACK_FACE_PAINTING,
-    
+
     NB_BENCH_RENDERING_OPTION,
-    
+
     WIREFRAME,
-    
+
     NB_RENDERING_OPTION
 };
 
@@ -105,19 +105,19 @@ enum RenderingOption
 ////////////////////////////////////////////////////////////////////////
 struct DisplayConfig
 {
-    unsigned int g_windows_width;
-    unsigned int g_windows_height;
-    double g_rotation_angle_y;
-    double g_rotation_angle_x;
-    double g_move_forward;
-    bool g_rotation;
+    unsigned int windows_width;
+    unsigned int windows_height;
+    double rotation_angle_y;
+    double rotation_angle_x;
+    double move_forward;
+    bool rotation;
 };
 
 struct RenderingConfig
 {
     RenderingMethod rendering_method;
     unsigned int nb_triangles;
-    
+
     std::bitset<NB_RENDERING_OPTION> rendering_options;
 };
 

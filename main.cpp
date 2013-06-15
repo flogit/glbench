@@ -43,8 +43,8 @@ PFNGLDELETEBUFFERSPROC glDeleteBuffers = 0;
 
 const unsigned int NB_MIN_FRAME = 30;
 
-const double default_rotation_angle_x = -10.0;  
-const double default_rotation_angle_y = -20.0;  
+const double default_rotation_angle_x = -10.0;
+const double default_rotation_angle_y = -20.0;
 
 const char* BENCH_FILE = "bench.txt";
 
@@ -58,12 +58,12 @@ int main(int, char**)
 
     // Default display config
     struct DisplayConfig display_config;
-    display_config.g_windows_width  = 600;
-    display_config.g_windows_height = 600;
-    display_config.g_rotation_angle_y = default_rotation_angle_y;
-    display_config.g_rotation_angle_x = default_rotation_angle_x;
-    display_config.g_move_forward = -1.5;
-    display_config.g_rotation = true;
+    display_config.windows_width  = 600;
+    display_config.windows_height = 600;
+    display_config.rotation_angle_y = default_rotation_angle_y;
+    display_config.rotation_angle_x = default_rotation_angle_x;
+    display_config.move_forward = -1.5;
+    display_config.rotation = true;
 
     // Default rendering config
     struct RenderingConfig rendering_config;
@@ -93,21 +93,21 @@ int main(int, char**)
     bool first_frame = true;
 
     EventType event_type = NO_EVENT;
-    
-    // Bench 
+
+    // Bench
     bool bench_mode = false;
     std::deque<RenderingConfig> bench_rendering_config_list;
     std::ofstream   bench_stream;
     unsigned int    bench_rendering_config_nb = 0;
     bool exit_bench = false;
-    
+
     // Current config
     RenderingConfig* p_current_rendering_config = &rendering_config;
     std::ostream*    p_current_stream = &std::cout;
-    
+
     struct timeval start;
     struct timeval end;
-    
+
     do // Main loop
     {
         // Event handler function
@@ -129,16 +129,16 @@ int main(int, char**)
                 bench_mode = true;
                 generate_bench_rendering_config_list(bench_rendering_config_list, rendering_config.nb_triangles);
                 bench_rendering_config_nb = bench_rendering_config_list.size();
-                
+
                 p_current_rendering_config = &bench_rendering_config_list.front();
-                
-                display_config.g_rotation = false;
-                display_config.g_rotation_angle_x = default_rotation_angle_x;
-                display_config.g_rotation_angle_y = default_rotation_angle_y;
-                
+
+                display_config.rotation = false;
+                display_config.rotation_angle_x = default_rotation_angle_x;
+                display_config.rotation_angle_y = default_rotation_angle_y;
+
                 bench_stream.open(BENCH_FILE);
                 p_current_stream = &bench_stream;
-                
+
                 std::cout << std::endl << "X--------------------------------------------------X" << std::endl;
                 std::cout << "| Bench started " << std::endl;
             }
@@ -147,13 +147,13 @@ int main(int, char**)
                 exit_bench = true;
             }
         }
-        
+
         if (bench_mode && rendering_times.size() == NB_MIN_FRAME)
         {
             //print bench results
             print_config(*p_current_rendering_config, (*p_current_stream));
             print_rendering_time (*p_current_stream, p_current_rendering_config->nb_triangles, rendering_times);
-            
+
             rendering_times.clear();
             bench_rendering_config_list.pop_front();
             if (!bench_rendering_config_list.empty())
@@ -167,24 +167,24 @@ int main(int, char**)
             }
             std::cout << '\r' << "| Bench completion : " << 100 - (100 * bench_rendering_config_list.size() / bench_rendering_config_nb) << " %" << std::flush;
         }
-        
+
         if (exit_bench)
         {
             bench_mode = false;
             exit_bench = false;
-            
+
             std::cout << std::endl << "| Bench exit ";
-            
+
             p_current_rendering_config = &rendering_config;
-            display_config.g_rotation = true;
-            
+            display_config.rotation = true;
+
             bench_stream.close();
             p_current_stream = &std::cout;
-            
+
             print_config(*p_current_rendering_config, (*p_current_stream));
             init_gl(rendering_data, display_config, *p_current_rendering_config);
          }
-        
+
         gettimeofday(&start, NULL);
 
         // Render function
@@ -215,9 +215,9 @@ int main(int, char**)
                 print_rendering_time (*p_current_stream, p_current_rendering_config->nb_triangles, rendering_times);
             }
 
-            if (display_config.g_rotation)
+            if (display_config.rotation)
             {
-                display_config.g_rotation_angle_y += 0.02 * current_rendering_time;
+                display_config.rotation_angle_y += 0.02 * current_rendering_time;
             }
         }
 
@@ -253,7 +253,7 @@ void init_sdl(const DisplayConfig& in_display_config)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_WM_SetCaption("GlBench", NULL);
 
-    SDL_SetVideoMode(in_display_config.g_windows_width, in_display_config.g_windows_height, 32, SDL_OPENGL | SDL_GL_DOUBLEBUFFER);
+    SDL_SetVideoMode(in_display_config.windows_width, in_display_config.windows_height, 32, SDL_OPENGL | SDL_GL_DOUBLEBUFFER);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -276,7 +276,7 @@ void init_gl_extensions()
 ////////////////////////////////////////////////////////////////////////
 void init_gl(RenderingData& io_rendering_data, const DisplayConfig& in_display_config, const RenderingConfig& in_rendering_config)
 {
-    glViewport(0 , 0, static_cast<GLsizei>(in_display_config.g_windows_width), static_cast<GLsizei>(in_display_config.g_windows_height));
+    glViewport(0 , 0, static_cast<GLsizei>(in_display_config.windows_width), static_cast<GLsizei>(in_display_config.windows_height));
 
     if (in_rendering_config.rendering_options.test(WIREFRAME))
     {
@@ -338,8 +338,8 @@ EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_render
 
     SDL_Event event;
 
-    while (event_type != QUIT_REQUESTED 
-           && 
+    while (event_type != QUIT_REQUESTED
+           &&
            SDL_PollEvent(&event))           // poll event by event
     {
         switch (event.type)
@@ -400,11 +400,11 @@ EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_render
                         event_type = RENDERING_CONFIG_CHANGED;
                         break;
                     case SDLK_SPACE:
-                        io_display_config.g_rotation = !io_display_config.g_rotation;
+                        io_display_config.rotation = !io_display_config.rotation;
                         break;
                     case SDLK_b:
                         event_type = BENCH_REQUESTED;
-                        
+
                     default:
                         break;
                 }
@@ -420,11 +420,11 @@ EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_render
                 }
                 else if (event.button.button == SDL_BUTTON_WHEELDOWN)
                 {
-                    io_display_config.g_move_forward -= 0.1;
+                    io_display_config.move_forward -= 0.1;
                 }
                 else if (event.button.button == SDL_BUTTON_WHEELUP)
                 {
-                    io_display_config.g_move_forward += 0.1;
+                    io_display_config.move_forward += 0.1;
                 }
                 break;
 
@@ -447,8 +447,8 @@ EventType event_sdl(DisplayConfig& io_display_config, RenderingConfig& io_render
                     }
                     else
                     {
-                        io_display_config.g_rotation_angle_x += event.button.y - mouse_current_position_y;
-                        io_display_config.g_rotation_angle_y += event.button.x - mouse_current_position_x;
+                        io_display_config.rotation_angle_x += event.button.y - mouse_current_position_y;
+                        io_display_config.rotation_angle_y += event.button.x - mouse_current_position_x;
                         mouse_current_position_x = event.button.x;
                         mouse_current_position_y = event.button.y;
                     }
@@ -501,7 +501,7 @@ void print_rendering_time (std::ostream& out_stream, unsigned int in_nb_triangle
         mean_rendering_time += static_cast<double>(*it);
     }
     mean_rendering_time = mean_rendering_time / static_cast<double>(in_rendering_times.size());
-                    
+
     out_stream << in_nb_triangles << " triangles rendered in " << static_cast<unsigned int>(mean_rendering_time + 0.5) << " ms";
     if (in_rendering_times.size() < NB_MIN_FRAME)
     {
@@ -720,7 +720,7 @@ void process_vbo(RenderingData& io_rendering_data, const RenderingConfig& in_ren
         glGenBuffers(1, &io_rendering_data.vertex_buffer_id);
         glBindBuffer(GL_ARRAY_BUFFER, io_rendering_data.vertex_buffer_id);
         glBufferData(GL_ARRAY_BUFFER, io_rendering_data.geometry.vertices.size() * vertex_data_size * sizeof(GLfloat), p_vertex_buffer, gl_draw_method);
-        
+
         delete [] p_vertex_buffer;
 
         // IBO
@@ -932,15 +932,15 @@ void render(const RenderingData& in_rendering_data, const RenderingConfig& in_re
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Modelview matrix translation
-    glTranslated(0.0, 0.0, in_display_config.g_move_forward);
+    glTranslated(0.0, 0.0, in_display_config.move_forward);
 
     // Ligthing
     GLfloat light_position[] = {0.0f, 2.0f, 1.0f, 0.0f};
     glLightfv(GL_LIGHT0, GL_POSITION, light_position);
 
     // Modelview matrix rotation
-    glRotated(in_display_config.g_rotation_angle_y, 0.0, 1.0, 0.0);
-    glRotated(in_display_config.g_rotation_angle_x, 1.0, 0.0, 0.0);
+    glRotated(in_display_config.rotation_angle_y, 0.0, 1.0, 0.0);
+    glRotated(in_display_config.rotation_angle_x, 1.0, 0.0, 0.0);
 
     // Painting
     if (in_rendering_config.rendering_method == IMMEDIATE)
@@ -991,7 +991,7 @@ void generate_bench_rendering_config_list(std::deque< RenderingConfig >& in_rend
             rendering_config.nb_triangles = in_nb_triangles;
             rendering_config.rendering_method = static_cast<RenderingMethod> (rendering_method);
             rendering_config.rendering_options = rendering_options;
-            
+
             in_rendering_config_list.push_back(rendering_config);
         }
     }
